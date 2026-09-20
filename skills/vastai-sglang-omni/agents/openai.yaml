@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vast.ai SGLang-Omni"
+  short_description: "Profile SGLang-Omni models on Vast.ai GPUs"
+  default_prompt: "Use $vastai-sglang-omni to prepare a bounded SGLang-Omni benchmark or profiling plan on Vast.ai."

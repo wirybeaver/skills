@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vast.ai GPU Runtime"
+  short_description: "Prepare and validate Vast.ai GPU runtimes"
+  default_prompt: "Use $vastai-gpu-runtime to prepare and validate a source-pinned Vast.ai GPU execution target."
