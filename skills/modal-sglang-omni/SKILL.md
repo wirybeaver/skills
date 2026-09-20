@@ -76,12 +76,14 @@ content fingerprint for dirty files. Do not substitute the image's bundled
 checkout. Resolve the image digest and account/run identifiers per invocation
 rather than hardcoding them into this skill.
 
-Run project commands from the checkout root or set an explicit `PYTHONPATH`.
-Before model work, import both `sglang_omni` and the selected benchmark module,
-record their resolved file paths, and require them to come from the intended
-checkout. Prefer an editable `--no-deps` overlay when the image already has the
-pinned dependency set; resolving dependencies again can invalidate comparison
-parity.
+Run project commands from the checkout root with an explicit `PYTHONPATH` for
+that checkout. Before model work, import both `sglang_omni` and the selected
+benchmark module in every source arm, record their resolved file paths, and
+require them to come from the intended checkout. Keep A/B arms process-local:
+do not sequentially replace one system editable install with another. Use an
+isolated editable `--no-deps` install only when packaging or entry-point
+behavior itself must be tested; resolving dependencies again can invalidate
+comparison parity.
 
 ### Conditional profiler readiness
 
@@ -124,6 +126,12 @@ caches separate from per-run directories so later runs cannot overwrite cited
 evidence. Record both remote and local artifact paths, persist intermediate
 results, and copy the report and its cited artifacts back to the output
 directory required by model-profiling before teardown.
+
+Classify run artifacts as required-local, remote-only, or disposable before
+execution. For evaluations that generate bulky media, run the accuracy scorer
+against the media on Modal, verify complete sample coverage, and copy back the
+scorer outputs, manifests, metrics, and cited logs rather than the media itself.
+An intentionally excluded remote-only artifact is not a copy-back failure.
 
 Every Modal run should have a stable run identifier and record:
 

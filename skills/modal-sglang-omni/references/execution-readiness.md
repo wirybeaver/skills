@@ -17,16 +17,22 @@ commit plus patch/content fingerprints. Work from the checkout root or set an
 explicit `PYTHONPATH`, then import both `sglang_omni` and the selected benchmark
 module and require their `__file__` paths to resolve inside that checkout.
 
-Prefer the environment's equivalent of:
+Prefer a process-local source overlay:
 
 ```bash
 cd "$EXACT_CHECKOUT"
-uv pip install --no-deps -e .
+PYTHONPATH="$EXACT_CHECKOUT${PYTHONPATH:+:$PYTHONPATH}" \
+  python -m sglang_omni.cli --help
 ```
 
-Use an editable no-dependency overlay only when the image already has the
-pinned dependency set. A `ModuleNotFoundError` for a repository benchmark often
-means the command ran from the wrong root, not that a package is absent.
+Give each A/B server and client its own explicit `PYTHONPATH`, and verify imports
+inside each process environment. Installing two checkouts with `pip install -e`
+or `uv pip install --system -e` targets the same distribution slot and makes the
+second checkout replace the first. Use an isolated virtual environment or
+target directory for an editable no-dependency install only when packaging or
+entry-point behavior itself is under test. A `ModuleNotFoundError` for a
+repository benchmark often means the command ran from the wrong root, not that
+a package is absent.
 
 ## CPU command-envelope gate
 
@@ -55,6 +61,10 @@ hides the failed predicate and may exit before diagnostics become durable.
 Check every shell dependency. At least one CI image lacked `rg`; use
 `grep`/`find` or add a pinned package to the prepared image.
 
+Discover usable CPU IDs with `os.sched_getaffinity(0)` before applying
+`taskset`; Modal CPU sets need not start at zero. Partition only those allowed
+IDs among servers and clients, and persist the resolved mapping.
+
 Completion criterion: the exact controller envelope, source imports, output
 parents, compact persistence, and cleanup all pass without a GPU.
 
@@ -69,6 +79,10 @@ Before model download or server startup:
 3. Repeat source-import and mount checks.
 4. Run only the profiler gates named in the approved plan.
 5. Persist and hash-verify each compact terminal result before advancing.
+
+Keep NVML preflight commands portable: query GPU utilization/memory and MIG
+state separately when a combined `nvidia-smi -q -d ...` form is unsupported,
+and trim CSV fields before numeric or string comparison.
 
 Container and host NVML PID namespaces may differ. Attribute GPU work with
 before/boot/teardown bracketing and owned process ancestry, not an unresolved
@@ -86,13 +100,26 @@ Record whether each mounted Volume is v1 or v2.
   a Sandbox exec process does not turn that client object into the mount owner.
 
 Use client-side `modal volume put` followed by `modal volume get` and a byte/hash
-comparison for compact boundaries that must survive before teardown. Do not
-inject Modal credentials into the workload image merely to call
-`Volume.commit()`. Close all output files before a V2 `sync` or final Sandbox
-termination. After termination, download the exact run directory and verify
-file sizes and hashes. Check the installed CLI/API before assuming recursive
-directory download; when it lacks that behavior, enumerate the remote run and
-download each expected file through a checked exact-path operation.
+comparison for compact boundaries that must survive before teardown. Prove a
+mount with `stat` plus a write/read/hash round trip rather than relying on the
+host-specific text emitted by `mount`. Do not inject Modal credentials into the
+workload image merely to call `Volume.commit()`. Close all output files before
+a V2 `sync` or final Sandbox termination.
+
+Create an artifact manifest before execution with three retention classes:
+
+- `required-local`: reports, scorer outputs, per-sample scoring records,
+  manifests, metrics, traces, and logs cited by conclusions;
+- `remote-only`: bulky generated media needed by a remote accuracy scorer;
+- `disposable`: warmup outputs and uncited intermediates.
+
+Run the accuracy scorer on Modal, require complete expected sample-ID coverage,
+and persist its outputs before teardown. After termination, selectively download
+and checksum every `required-local` artifact. Do not download `remote-only`
+media unless it becomes necessary for diagnosis or a cited conclusion. Treat an
+intentional exclusion as success; report failure only when a required artifact
+is missing or fails verification. Check the installed CLI/API before assuming
+glob or recursive-download behavior; enumerate exact remote paths when needed.
 
 ## Retries and cleanup
 
