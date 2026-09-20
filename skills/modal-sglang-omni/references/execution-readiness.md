@@ -34,39 +34,72 @@ entry-point behavior itself is under test. A `ModuleNotFoundError` for a
 repository benchmark often means the command ran from the wrong root, not that
 a package is absent.
 
-## CPU command-envelope gate
+## Pre-GPU harness checks
 
-Run the exact controller and shell envelope against harmless commands in a
-short CPU Sandbox before the first GPU allocation. Prove that:
+Keep this gate cheap and local-first:
 
-- every upload and import resolves to the intended source;
-- every output and shell-redirection parent exists before command launch;
-- launch, readiness polling, request, owned-process stop, and cleanup commands
-  return their expected codes;
-- a compact boundary survives a client-side `modal volume put`, immediate
-  `modal volume get`, and byte/hash comparison;
-- each command result is persisted independently before the next terminal
-  gate.
+- syntax-check controller and shell files;
+- materialize the approved manifest and verify its exact ordered entries;
+- verify source archives, hashes, imports, arm deltas, and output parents;
+- exercise launch/readiness/request/stop and artifact packaging with harmless
+  local processes;
+- run the manifest cursor fixtures described below.
 
-Keep growing controller history local. A prior run exceeded Modal's 65,536-byte
-exec argument limit by embedding already-persisted NCU help text into cumulative
-JSON. Transfer files or compact history-free records instead.
+Run relevant source tests once per source-content hash. Reuse that evidence for
+orchestration-only edits; rerun only syntax, fixtures, lifecycle, and packaging.
 
-A CPU Sandbox normally lacks GPU injection, so absence of `nvidia-smi` there is
-expected. Record cgroup files as observations; their encoded quota/ceiling need
-not equal the requested Modal CPU or memory value. Use separate commands for
-identity, mounts, source hashes, runtime, and tools: one long `set -e` command
-hides the failed predicate and may exit before diagnostics become durable.
+Use a short CPU Modal Sandbox only for checks that require Modal itself, such
+as Sandbox exec/lifecycle, mount behavior, or a prepared profiler image. A CPU
+Sandbox is not a substitute for GPU checks and need not run the full model test
+suite.
 
-Check every shell dependency. At least one CI image lacked `rg`; use
-`grep`/`find` or add a pinned package to the prepared image.
+When using Modal, prove a compact Volume put/get hash round trip and discover
+usable CPU IDs with `os.sched_getaffinity(0)` before `taskset`. Persist each
+terminal result independently.
 
-Discover usable CPU IDs with `os.sched_getaffinity(0)` before applying
-`taskset`; Modal CPU sets need not start at zero. Partition only those allowed
-IDs among servers and clients, and persist the resolved mapping.
+## Schedule lock
 
-Completion criterion: the exact controller envelope, source imports, output
-parents, compact persistence, and cleanup all pass without a GPU.
+Hash an immutable manifest containing every phase, arm fingerprint, placement,
+warmup, timed leg, scorer entry, cohort, shape, request count, and total budget.
+
+The harness reads this list in order. Before each launch, the next full tuple
+must match the cursor and remain within budget. Record terminal status, then
+advance. Reject additions, duplicates, reordering, placement swaps, extra
+requests, and work after the final entry.
+
+Assert these flattened visit lists before GPU allocation:
+
+```text
+gate A/A substantial = [A1, A2]
+gate A/A timed       = [A1, A2, A2, A1]
+gate A/B substantial = [A, B]
+gate A/B timed       = [A, B, B, A]
+
+full A/A substantial = [A1, A2]
+full A/A timed       = [A1, A2, A2, A1, A1, A2]
+full A/B substantial = [A, B]
+full A/B timed       = [A, B, B, A, A, B]
+```
+
+Store workloads as ordered records with independent `concurrency`,
+`shape_warmup_samples`, and `timed_samples` fields. Do not derive one workload's
+sample count from another.
+
+For `G` gate workloads, each gate phase contains `2` substantial warmups,
+`4*G` shape warmups, and `4*G` timed legs. For `F` full workloads, each full
+phase contains `2`, `6*F`, and `6*F` respectively. Within every timed visit,
+each workload is one adjacent, indivisible `[shape warmup, timed leg]` pair.
+The cursor cannot advance to another workload between the two entries.
+
+The timed request budget for one phase is the sum of its workload-specific
+`timed_samples`, multiplied by `4` for gate or `6` for full qualification.
+
+Fixture-test four failures before GPU allocation: added phase, swapped
+placement, duplicate leg, and extra request. Persist the manifest hash beside
+the actual ledger.
+
+A scope change gets a new manifest. Terminate the current paid Sandbox before
+requesting approval for it.
 
 ## Real GPU allocation gate
 
@@ -125,8 +158,8 @@ glob or recursive-download behavior; enumerate exact remote paths when needed.
 
 Write the local controller record with Sandbox ID and remote run path
 immediately after allocation. Every retry gets a new record and remote
-directory. Correct one diagnosed layer and re-run all earlier gates; never
-overwrite the only pointer to a failed allocation.
+directory. Correct one diagnosed layer and rerun only the checks invalidated by
+that change; never overwrite the only pointer to a failed allocation.
 
 Put owned-process stop, Sandbox termination, terminal polling, artifact
 download, and inventory checks in independent `finally` steps. Terminate with

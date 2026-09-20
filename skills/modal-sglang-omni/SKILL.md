@@ -1,220 +1,122 @@
 ---
 name: modal-sglang-omni
-description: Run SGLang-Omni profiling and benchmarks on Modal Sandboxes with repeatable source overlays, profiler image/readiness gates, durable Volume evidence, and verified cleanup. Use for Modal execution including torch.profiler, py-spy, nsys, NCU, or DCGM checks.
+description: Run SGLang-Omni profiling and benchmarks on Modal Sandboxes with exact source overlays, locked A/A and A/B schedules, durable evidence, and verified cleanup.
 ---
 
 # Modal SGLang-Omni profiling
 
-This is a provider glue skill. Use it together with the official `$modal`
-skill and the repository-defined `$model-profiling` skill; it does not replace
-either one and does not duplicate the five-layer methodology.
+This skill is Modal provider glue for `$model-profiling`. It controls how an
+approved experiment runs on Modal; it does not change what the experiment is.
 
-## Source-of-truth contract
+## Authority
 
-Use `$model-profiling` to resolve the source of truth for profiling behavior.
-It fetches the latest GitHub main-branch `SKILL.md`, `METHODOLOGY.md`, and
-`PROMPT_TEMPLATE.md`. At every invocation, read those files completely and
-apply their current wording. Keep the authoritative URLs in model-profiling
-only so a source change requires one edit.
+Read the current `$model-profiling` source workflow and the official `$modal`
+skill. `$model-profiling` owns scope, confirmation, methodology, evidence, and
+reporting. This skill owns Modal setup, execution, persistence, and teardown.
+When they conflict, `$model-profiling` wins.
 
-Read the official `$modal` skill for current Modal APIs, authentication,
-Sandbox lifecycle, GPU selection, and CLI/SDK behavior. Read any existing
-`.profiling-runs/<model>/profile.md` and cited artifacts as required by the
-source workflow.
+Read [execution readiness](references/execution-readiness.md) for every run.
+Read [profiler readiness](references/profiler-readiness.md) only when the
+approved plan names a profiler.
 
-If the source files cannot be retrieved, report the retrieval failure.
-If this glue conflicts with the source workflow, the source workflow wins.
-Do not copy its layer ordering, evidence rubric, report schema, confirmation
-rules, or result-tracking policy into this file.
+## Two-stage paired schedule
 
-Translate pre-plan target checks to Modal without weakening them. Run local
-read-only checks before presenting the plan. When a source-workflow check such
-as `nvidia-smi` or exact-image py-spy requires creating a Modal Sandbox, list it
-as an unresolved provider check in the plan and execute it in the approved CPU
-or GPU preflight. Creating provider resources still waits for confirmation;
-the deferred check remains a gate rather than being skipped.
+Write the approved schedule to an immutable manifest before allocating a GPU.
+Define an ordered workload list for each stage. Every workload independently
+specifies its concurrency, shape-warmup sample count, and timed sample count;
+do not assume the workload set or sample counts are uniform.
+Within one stage, A/A and A/B use the same workload list and sample counts.
 
-## Provider bridge
+### Screening gate
 
-Let `$model-profiling` own the plan, scope, gates, executor prompt, evidence,
-report, and durable-record decisions. This skill adds only the Modal execution
-block and lifecycle:
-
-1. While preparing the plan, resolve current Modal facts through `$modal`, read
-   [execution readiness](references/execution-readiness.md), and append the
-   provider block to the model-profiling executor prompt: app/workspace and
-   profile, image, checkout/commit, GPU request, timeout, secret names, Volume
-   mounts, artifact paths, copy-back command, cleanup command, an explicit arm
-   manifest, and the fully materialized execution schedule. When the plan
-   names a profiler, also read
-   [profiler readiness](references/profiler-readiness.md). Never invent or print
-   secret values.
-2. Do not create a GPU Sandbox, download weights, or launch a server before
-   the first confirmation required by `$model-profiling`.
-3. After that confirmation, run the execution reference's CPU command-envelope
-   gate before allocating a GPU. Reading the references prepares the plan;
-   creating a Sandbox or changing provider state waits for confirmation.
-4. Persist intermediate evidence and copy the final report and cited raw files
-   into the model-profiling output directory.
-5. Apply the source skill's executor continuation, second confirmation, A/B,
-   Layer 5, cleanup, and reporting rules without restating or changing them.
-
-## Provider repeatability
-
-### Image and source
-
-Use the active checkout's relevant CI workflow to resolve the base image.
-Preserve its registry digest; if it uses a mutable tag, resolve and record the
-digest before running. Record the workflow path and installed core dependency
-versions. CI may install dependencies after starting its container, so the
-base image alone does not establish environment parity: inspect the setup
-steps and apply those needed by the experiment. Keep any diagnostic package
-changes explicit in the run record.
-
-Upload the intended checkout, including authorized uncommitted changes, and
-verify that the server imports that source. Record the commit and a patch or
-content fingerprint for dirty files. Do not substitute the image's bundled
-checkout. Resolve the image digest and account/run identifiers per invocation
-rather than hardcoding them into this skill.
-
-Run project commands from the checkout root with an explicit `PYTHONPATH` for
-that checkout. Before model work, import both `sglang_omni` and the selected
-benchmark module in every source arm, record their resolved file paths, and
-require them to come from the intended checkout. Keep A/B arms process-local:
-do not sequentially replace one system editable install with another. Use an
-isolated editable `--no-deps` install only when packaging or entry-point
-behavior itself must be tested; resolving dependencies again can invalidate
-comparison parity.
-
-For every comparison, classify the experiment as source-controlled,
-configuration-controlled, or hybrid. Record each arm's logical role, exact
-repository commit, dirty-content fingerprint, source archive hash, launch
-arguments, and intended difference from the other arm. Equal commits are
-valid only when an explicitly configuration-controlled experiment has a
-non-empty arm-specific configuration difference. A source-controlled
-experiment must identify every arm by its exact commit rather than describing
-both as the current `HEAD`.
-
-Validate this arm manifest in the CPU command-envelope gate. Materialize each
-arm independently, assert its commit and content hash, import from its expected
-source path, and verify the declared source or configuration delta. Stop before
-GPU allocation if a source-controlled comparison resolves to equal source
-trees, or if a configuration-controlled comparison has no effective
-configuration difference. Do not silently repair either condition by changing
-the approved experiment.
-
-### Paired multi-shape execution
-
-When an approved experiment contains multiple arms, repeats, and workload
-shapes, materialize the complete schedule before creating a GPU Sandbox. Name
-the outer, middle, and inner loops and list the actual arm-visit order; prose
-such as "three pairs at each concurrency" is not a complete schedule.
-
-For a resident-server comparison whose approved protocol treats an arm visit
-as the outer unit, use `repeat -> arm visit -> shape/concurrency -> shape
-warmup -> timed leg`. For example:
+Use small, workload-specific sample counts to reject weak candidates cheaply:
 
 ```text
-round 1: A1[c1,c8,c16,c32] -> A2[c1,c8,c16,c32]
-round 2: A2[c1,c8,c16,c32] -> A1[c1,c8,c16,c32]
-round 3: A1[c1,c8,c16,c32] -> A2[c1,c8,c16,c32]
+A/A substantial: A1 -> A2
+A/A timed:       A1 -> A2 -> A2 -> A1
+
+A/B substantial: A -> B
+A/B timed:       A -> B -> B -> A
 ```
 
-This is an orchestration default, not a replacement for `$model-profiling`'s
-experiment design. Preserve a different loop order when the confirmed plan
-specifies one, and never transpose confirmed loops while implementing the
-harness.
+### Full qualification
 
-Distinguish server-lifecycle warmup from per-shape warmup. Run substantial
-warmup after readiness and a real smoke request but before that server's first
-timed arm visit; repeat it after every server restart or source-arm
-replacement. Record any convergence pass separately, and exclude both passes
-from timed results. Run shape-specific warmup immediately before its timed leg
-inside each arm visit. The approved schedule must state warmup sizes, cohort
-hashes, and whether cohorts are reused or disjoint.
+Only a candidate that passes the confirmed screening criterion may enter full
+qualification. Use a separately confirmed full workload map; for example,
+`c1`, `c8`, and `c16` may each use 256 samples, but neither those workloads nor
+that count are defaults.
 
-### Conditional profiler readiness
+Full qualification has matching full-size A/A and A/B phases:
 
-Keep ordinary benchmarking independent of profiler availability. When the
-approved plan includes profiler work, read
-[profiler readiness](references/profiler-readiness.md) and classify
-each failure as image/tool absence, source-path error, runtime permission,
-profiler lifecycle, or workload failure before attempting a repair.
+```text
+A/A substantial: A1 -> A2
+A/A timed:       A1 -> A2 -> A2 -> A1 -> A1 -> A2
 
-This skill owns every Modal profiler branch, including NCU hardware counters.
-The readiness references define image preparation, permission gates, bounded
-capture, profiler lifecycle, Volume evidence, and terminal cleanup. Use the
-repository methodology only to decide when each profiler is warranted and what
-question its evidence must answer.
+A/B substantial: A -> B
+A/B timed:       A -> B -> B -> A -> A -> B
+```
 
-### GPU and Sandbox
+Within each timed arm visit, iterate only that stage's confirmed workload list.
+For every workload, run exactly one shape warmup immediately followed by
+exactly one timed leg using that workload's own sample counts. Finish this pair
+before advancing to the next workload. Do not batch all shape warmups before
+the timed legs, and do not transpose the loops.
 
-Preserve the user's requested hardware. When the experiment requires a fixed
-H100, use `gpu="H100!"` to prevent an automatic H200 upgrade, and verify the
-allocated device during preflight. See the official
-[GPU guide](https://modal.com/docs/guide/gpu).
+The full stage may start automatically only when its exact workload map,
+schedule, screening criterion, and incremental cost were already confirmed.
+Otherwise persist the gate result, terminate the Sandbox, and request approval.
 
-Use a GPU-capable `modal.Sandbox` with the current SDK. Check current official
-Sandbox documentation and SDK behavior before selecting backend options.
-Avoid hardcoding a classic/V2 switch: backend routing can change, and Modal's
-[V2 reference](https://modal.com/docs/guide/sandbox-v2) describes automatic
-fallback to the previous backend for unsupported features such as GPUs.
+`B -> A` means visit B, then visit A. It does not swap commits, server slots,
+CPU sets, ports, or logical arm identities. A BA placement crossover is a new
+experiment and is not part of the schedule above.
 
-Reuse the Sandbox for the verified source overlay, server launches, HTTP checks,
-and profiler commands within the approved experiment. When the plan names a
-native profiler, prepare it in a digest-pinned derivative image and validate
-its command envelope in a CPU Sandbox before allocating the paid GPU. Give the
-session a bounded lifetime and retain its ID so interrupted orchestration can
-recover logs and terminate the allocation.
+The manifest is a closed list. Execute exactly its entries and stop at its end.
+An extra phase, arm, placement, repeat, shape, profiler, or scorer requires a
+new plan and explicit confirmation. First persist evidence and terminate the
+current paid Sandbox. A generic “continue” resumes the existing manifest; it
+never expands it.
 
-### Persistence and run record
+## Workflow
 
-Mount a Modal Volume for model caches and experiment artifacts. Keep reusable
-caches separate from per-run directories so later runs cannot overwrite cited
-evidence. Record both remote and local artifact paths, persist intermediate
-results, and copy the report and its cited artifacts back to the output
-directory required by model-profiling before teardown.
+1. Add a short Modal block to the `$model-profiling` plan: profile/app, image
+   digest, GPU, timeout, source commits/configs, Volume paths, exact visit
+   sequence, warmups, shapes, total legs/requests, scorer coverage, and maximum
+   GPU time. Wait for the confirmation required by `$model-profiling`.
+2. Run the pre-GPU checks in execution readiness. Keep them cheap and
+   local-first. Use a CPU Modal Sandbox only for behavior that actually
+   requires Modal, such as Sandbox lifecycle or Volume mounts.
+3. Allocate one bounded GPU Sandbox. Immediately record its ID and remote run
+   path. Verify the requested GPU, idle state, CUDA, mounts, and exact imports
+   before downloading weights or starting servers.
+4. Execute the manifest with a fail-closed cursor. Persist each leg's terminal
+   status before advancing. A missing, duplicate, reordered, wrong-arm, or
+   over-budget entry stops the run.
+5. Keep bulky generated media on the Volume. Run approved scorers there, then
+   copy back reports, metrics, per-sample results, logs, manifests, and checksums.
+6. After the last approved remote task, terminate the Sandbox before analysis
+   or follow-up planning. Verify terminal state and zero owned tasks/containers.
 
-Classify run artifacts as required-local, remote-only, or disposable before
-execution. For evaluations that generate bulky media, run the accuracy scorer
-against the media on Modal, verify complete sample coverage, and copy back the
-scorer outputs, manifests, metrics, and cited logs rather than the media itself.
-An intentionally excluded remote-only artifact is not a copy-back failure.
+## Modal invariants
 
-Every Modal run should have a stable run identifier and record:
+- Resolve the CI image to a registry digest and record installed core versions.
+- Upload each intended source arm independently. Use an explicit arm-specific
+  `PYTHONPATH`; never replace one shared editable install with another.
+- Record each arm's logical role, commit, dirty fingerprint, archive hash,
+  launch arguments, and source/configuration difference.
+- For a fixed H100 request use `gpu="H100!"` and verify the allocated device.
+- Give every attempt a new run ID and remote directory. Never overwrite the
+  only pointer to an earlier attempt.
+- Persist intermediate evidence after long operations. Classify artifacts as
+  required-local, remote-only, or disposable before the run.
+- Touch only owned processes and allocations. A user stop request means stop
+  owned work and terminate the exact Sandbox immediately, not after the phase.
 
-- repository commit SHA and dirty state;
-- an experiment manifest containing arm identities, source/configuration
-  deltas, loop nesting, warmup policy, cohort hashes, and intended leg order;
-- an append-only actual-leg ledger containing sequence number, server/arm,
-  source and configuration fingerprints, phase, concurrency, cohort hash,
-  timestamps, status, and artifact directory;
-- model checkpoint revision or resolved snapshot;
-- Modal image, GPU type, app/profile, Volume, and timeout;
-- exact launch and benchmark commands;
-- raw artifact paths and the report path.
+## Pre-GPU check scope
 
-Write the local controller record, including the Sandbox ID and exact remote
-run path, immediately after allocation and before file upload or remote exec.
-Use one record per attempt; never overwrite the only pointer to an earlier
-allocation during a retry.
+Source tests are keyed by source content. Run the smallest relevant tests when
+the source changes, and reuse that evidence while the source hashes stay fixed.
+An orchestration-only edit reruns syntax, manifest fixtures, lifecycle, and
+persistence checks—not the full model test suite.
 
-Before accepting results, compare the actual-leg ledger with the approved
-experiment manifest. A missing, duplicated, reordered, or wrong-arm timed leg
-is a protocol failure rather than benchmark evidence.
-
-Reuse the Volume for caches, but never treat cached weights or an existing
-Sandbox as proof that the environment is unchanged. Re-run the provider
-preflight and let the source skill decide whether the environment fingerprint
-invalidates prior evidence.
-
-## Lifecycle and handoff
-
-Use the current official Modal lifecycle API. Always put Sandbox termination
-and detach in a `finally` path, then independently verify the terminal state
-and artifact copy-back. Persist intermediate evidence before long or
-preemptible operations.
-
-Before reporting completion, independently check provider cleanup and
-copy-back. Let the source skill define report validation, methodology routing,
-commit behavior, durable tracking, and final status text.
+The pre-GPU checks do not prove GPU performance, CUDA correctness, model
+quality, or profiler permissions. Those remain GPU-run evidence.
