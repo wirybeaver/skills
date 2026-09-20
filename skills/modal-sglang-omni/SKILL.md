@@ -44,8 +44,9 @@ block and lifecycle:
    [execution readiness](references/execution-readiness.md), and append the
    provider block to the model-profiling executor prompt: app/workspace and
    profile, image, checkout/commit, GPU request, timeout, secret names, Volume
-   mounts, artifact paths, copy-back command, and cleanup command. When the
-   plan names a profiler, also read
+   mounts, artifact paths, copy-back command, cleanup command, an explicit arm
+   manifest, and the fully materialized execution schedule. When the plan
+   names a profiler, also read
    [profiler readiness](references/profiler-readiness.md). Never invent or print
    secret values.
 2. Do not create a GPU Sandbox, download weights, or launch a server before
@@ -84,6 +85,53 @@ do not sequentially replace one system editable install with another. Use an
 isolated editable `--no-deps` install only when packaging or entry-point
 behavior itself must be tested; resolving dependencies again can invalidate
 comparison parity.
+
+For every comparison, classify the experiment as source-controlled,
+configuration-controlled, or hybrid. Record each arm's logical role, exact
+repository commit, dirty-content fingerprint, source archive hash, launch
+arguments, and intended difference from the other arm. Equal commits are
+valid only when an explicitly configuration-controlled experiment has a
+non-empty arm-specific configuration difference. A source-controlled
+experiment must identify every arm by its exact commit rather than describing
+both as the current `HEAD`.
+
+Validate this arm manifest in the CPU command-envelope gate. Materialize each
+arm independently, assert its commit and content hash, import from its expected
+source path, and verify the declared source or configuration delta. Stop before
+GPU allocation if a source-controlled comparison resolves to equal source
+trees, or if a configuration-controlled comparison has no effective
+configuration difference. Do not silently repair either condition by changing
+the approved experiment.
+
+### Paired multi-shape execution
+
+When an approved experiment contains multiple arms, repeats, and workload
+shapes, materialize the complete schedule before creating a GPU Sandbox. Name
+the outer, middle, and inner loops and list the actual arm-visit order; prose
+such as "three pairs at each concurrency" is not a complete schedule.
+
+For a resident-server comparison whose approved protocol treats an arm visit
+as the outer unit, use `repeat -> arm visit -> shape/concurrency -> shape
+warmup -> timed leg`. For example:
+
+```text
+round 1: A1[c1,c8,c16,c32] -> A2[c1,c8,c16,c32]
+round 2: A2[c1,c8,c16,c32] -> A1[c1,c8,c16,c32]
+round 3: A1[c1,c8,c16,c32] -> A2[c1,c8,c16,c32]
+```
+
+This is an orchestration default, not a replacement for `$model-profiling`'s
+experiment design. Preserve a different loop order when the confirmed plan
+specifies one, and never transpose confirmed loops while implementing the
+harness.
+
+Distinguish server-lifecycle warmup from per-shape warmup. Run substantial
+warmup after readiness and a real smoke request but before that server's first
+timed arm visit; repeat it after every server restart or source-arm
+replacement. Record any convergence pass separately, and exclude both passes
+from timed results. Run shape-specific warmup immediately before its timed leg
+inside each arm visit. The approved schedule must state warmup sizes, cohort
+hashes, and whether cohorts are reused or disjoint.
 
 ### Conditional profiler readiness
 
@@ -136,6 +184,11 @@ An intentionally excluded remote-only artifact is not a copy-back failure.
 Every Modal run should have a stable run identifier and record:
 
 - repository commit SHA and dirty state;
+- an experiment manifest containing arm identities, source/configuration
+  deltas, loop nesting, warmup policy, cohort hashes, and intended leg order;
+- an append-only actual-leg ledger containing sequence number, server/arm,
+  source and configuration fingerprints, phase, concurrency, cohort hash,
+  timestamps, status, and artifact directory;
 - model checkpoint revision or resolved snapshot;
 - Modal image, GPU type, app/profile, Volume, and timeout;
 - exact launch and benchmark commands;
@@ -145,6 +198,10 @@ Write the local controller record, including the Sandbox ID and exact remote
 run path, immediately after allocation and before file upload or remote exec.
 Use one record per attempt; never overwrite the only pointer to an earlier
 allocation during a retry.
+
+Before accepting results, compare the actual-leg ledger with the approved
+experiment manifest. A missing, duplicated, reordered, or wrong-arm timed leg
+is a protocol failure rather than benchmark evidence.
 
 Reuse the Volume for caches, but never treat cached weights or an existing
 Sandbox as proof that the environment is unchanged. Re-run the provider
