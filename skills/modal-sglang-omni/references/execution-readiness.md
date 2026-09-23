@@ -41,8 +41,8 @@ Keep this gate cheap and local-first:
 - syntax-check controller and shell files;
 - materialize the approved manifest and verify its exact ordered entries;
 - verify source archives, hashes, imports, arm deltas, and output parents;
-- exercise launch/readiness/request/stop and artifact packaging with harmless
-  local processes;
+- exercise launch/readiness/request/stop, the fresh-server contract below, and
+  artifact packaging with harmless local processes;
 - run the manifest cursor fixtures described below.
 
 Run relevant source tests once per source-content hash. Reuse that evidence for
@@ -56,6 +56,24 @@ suite.
 When using Modal, prove a compact Volume put/get hash round trip and discover
 usable CPU IDs with `os.sched_getaffinity(0)` before `taskset`. Persist each
 terminal result independently.
+
+## Fresh-server contract
+
+For repeated server visits in one Sandbox, give every launch a unique inherited
+environment marker. Stop all processes carrying that marker, including
+reparented descendants, then require an empty marker inventory and released GPU
+memory before advancing. Do not rely on the launcher's original process group
+alone.
+
+Keep each arm's approved port stable. Check release with the launcher's exact
+bind semantics and wait within a declared bound for TCP `TIME_WAIT`; reject an
+automatic fallback port. CPU fixtures must cover an occupied port, real
+`TIME_WAIT`, and a reparented marker process. Persist launch identity, bound
+port, owned processes, GPU memory, and release results in the manifest ledger.
+
+Output checks create and verify the parent directory only. The task owns its
+fresh final directory; fixture-test the pre-existing-target failure instead of
+creating that target during preflight.
 
 ## Schedule lock
 

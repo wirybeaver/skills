@@ -70,6 +70,12 @@ Otherwise persist the gate result, terminate the Sandbox, and request approval.
 CPU sets, ports, or logical arm identities. A BA placement crossover is a new
 experiment and is not part of the schedule above.
 
+When one GPU cannot hold both servers, run each visit as a fresh, sequential
+server on the same placement. A1/A2 remain identical baseline restarts, and the
+A/A band measures restart noise. Record the lifecycle in the manifest and use
+the fresh-server contract in execution readiness; live dual servers are an
+option when they fit, not a requirement.
+
 The manifest is a closed list. Execute exactly its entries and stop at its end.
 An extra phase, arm, placement, repeat, shape, profiler, or scorer requires a
 new plan and explicit confirmation. First persist evidence and terminate the
