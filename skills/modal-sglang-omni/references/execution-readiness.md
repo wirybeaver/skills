@@ -77,47 +77,64 @@ creating that target during preflight.
 
 ## Schedule lock
 
-Hash an immutable manifest containing every phase, arm fingerprint, placement,
-warmup, timed leg, scorer entry, cohort, shape, request count, and total budget.
+Hash an immutable manifest containing the approved phase order, source arms,
+placement, server lifecycle, workload order, substantial and shape warmups,
+timed samples, the dual-server gain criterion and conditional tail, scorer
+entries, cohort IDs/seeds, retained WAVs, and budget.
+The cursor must reject extra or reordered entries and over-budget requests.
+An explicitly approved early quality-gate failure or screening failure stops
+later phases; record their skipped status and reason before teardown, rather
+than silently proceeding or treating the run as complete.
 
-The harness reads this list in order. Before each launch, the next full tuple
-must match the cursor and remain within budget. Record terminal status, then
-advance. Reject additions, duplicates, reordering, placement swaps, extra
-requests, and work after the final entry.
-
-Assert these flattened visit lists before GPU allocation:
+For **both** screening and optional full qualification, assert the approved
+timed visit order before GPU allocation:
 
 ```text
-gate A/A substantial = [A1, A2]
-gate A/A timed       = [A1, A2, A2, A1]
-gate A/B substantial = [A, B]
-gate A/B timed       = [A, B, B, A]
-
-full A/A substantial = [A1, A2]
-full A/A timed       = [A1, A2, A2, A1, A1, A2]
-full A/B substantial = [A, B]
-full A/B timed       = [A, B, B, A, A, B]
+two live servers fit: A/A = [A1, A2, A2, A1]
+                      A/B = [A, B, B, A] + [A, B] if gain criterion is unmet
+one server only:      A/B = [A, B, B, A, A, B]; no A/A
 ```
 
-Store workloads as ordered records with independent `concurrency`,
-`shape_warmup_samples`, and `timed_samples` fields. Do not derive one workload's
-sample count from another.
+For any model, an approved early quality check is **before** screening:
+untimed `A -> B`, with matching 32-sample cohorts at `c1` and `c8` in each
+arm. Score the approved model-appropriate metric (WER when meaningful) and
+apply the preapproved gross-regression threshold before continuing. If
+either workload or scorer is unavailable, resolve that in the plan. These
+requests do not substitute for substantial or shape warmups.
 
-For `G` gate workloads, each gate phase contains `2` substantial warmups,
-`4*G` shape warmups, and `4*G` timed legs. For `F` full workloads, each full
-phase contains `2`, `6*F`, and `6*F` respectively. Within every timed visit,
-each workload is one adjacent, indivisible `[shape warmup, timed leg]` pair.
-The cursor cannot advance to another workload between the two entries.
+Store workloads in order with `concurrency`, `shape_warmup_samples`, and
+`timed_samples`. Screening uses **256 timed samples per workload per visit**.
+Optional full qualification keeps the same visit order, shape-warmup policy,
+and 256 samples per timed leg; it may use a broader workload map only when
+that map and incremental cost are explicitly approved. Within each timed
+visit, every workload has one adjacent, indivisible
+`[shape warmup, timed leg]` pair. Never transpose visit and workload loops.
 
-The timed request budget for one phase is the sum of its workload-specific
-`timed_samples`, multiplied by `4` for gate or `6` for full qualification.
+For `W` workloads, a dual-server stage has `4W` A/A and `4W` or `6W` A/B timed
+legs, with the same number of shape warmups; a single-server stage has only
+`6W` A/B timed legs and shape warmups. Screening timed requests total
+`256 * 8W` or `256 * 10W` for dual-server runs, or `256 * 6W` for single-server
+runs. After the fourth dual-server A/B visit, evaluate the predeclared
+significant-gain criterion against the A/A noise floor. Record the last two
+A/B visits as skipped with the deciding evidence when the criterion passes;
+otherwise run them. Warm each new live server once at startup; for
+the single-server schedule restart and substantially warm the server on **all
+six visits**, including consecutive same-arm visits. Log starts, stops,
+placements, and ports so a reused or silently substituted server fails the
+manifest check. The single-server schedule has no independent A/A noise
+calibration; do not claim that a small A/B delta clears one.
 
-Fixture-test four failures before GPU allocation: added phase, swapped
-placement, duplicate leg, and extra request. Persist the manifest hash beside
-the actual ledger.
+For TTS, retain and score only the timed-leg `c1`/`c8` WAVs from A/B visits
+**3 B -> 4 A** after the stage's performance legs. Both arms must use the
+same sample IDs and seeds. The optional early 32-sample quality check is
+separate and scored before performance. Never add scorer coverage or a full
+stage after approval by interpreting a generic "continue" as a new phase.
 
-A scope change gets a new manifest. Terminate the current paid Sandbox before
-requesting approval for it.
+Fixture-test added phases, placement swaps, duplicate legs, extra requests,
+and both conditional-tail outcomes; also check the selected server lifecycle
+and scorer visit IDs.
+Persist the manifest hash beside the actual ledger. A scope change gets a
+new manifest after terminating the current paid Sandbox.
 
 ## Real GPU allocation gate
 
@@ -161,16 +178,22 @@ Create an artifact manifest before execution with three retention classes:
 
 - `required-local`: reports, scorer outputs, per-sample scoring records,
   manifests, metrics, traces, and logs cited by conclusions;
-- `remote-only`: bulky generated media needed by a remote accuracy scorer;
-- `disposable`: warmup outputs and uncited intermediates.
+- `remote-only`: generated media consumed by an approved early or main
+  quality scorer until scoring completes, including TTS WAVs from the middle
+  A/B B/A `c1`/`c8` pair;
+- `disposable`: warmup and unscored media, and uncited intermediates.
 
-Run the accuracy scorer on Modal, require complete expected sample-ID coverage,
-and persist its outputs before teardown. After termination, selectively download
-and checksum every `required-local` artifact. Do not download `remote-only`
-media unless it becomes necessary for diagnosis or a cited conclusion. Treat an
-intentional exclusion as success; report failure only when a required artifact
-is missing or fails verification. Check the installed CLI/API before assuming
-glob or recursive-download behavior; enumerate exact remote paths when needed.
+Run the approved early model-specific quality scorer before screening. Score
+the retained timed-leg TTS WAVs only after the corresponding performance visits.
+Require complete, paired sample-ID coverage and persist per-sample scores
+before teardown.
+Other models use their approved quality workload/scorer. After termination,
+selectively download and checksum every `required-local` artifact. Do not
+download `remote-only` media unless necessary for diagnosis or a cited
+conclusion. Treat an intentional exclusion as success; report failure only
+when a required artifact is missing or fails verification. Check the installed
+CLI/API before assuming glob or recursive-download behavior; enumerate exact
+remote paths when needed.
 
 ## Retries and cleanup
 

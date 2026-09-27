@@ -19,75 +19,85 @@ Read [execution readiness](references/execution-readiness.md) for every run.
 Read [profiler readiness](references/profiler-readiness.md) only when the
 approved plan names a profiler.
 
-## Two-stage paired schedule
+## Benchmark schedule
 
-Write the approved schedule to an immutable manifest before allocating a GPU.
-Define an ordered workload list for each stage. Every workload independently
-specifies its concurrency, shape-warmup sample count, and timed sample count;
-do not assume the workload set or sample counts are uniform.
-Within one stage, A/A and A/B use the same workload list and sample counts.
+Lock the approved sources, placement, ordered workloads, visits, warmups,
+scorers, cohorts, and budget in an immutable manifest before GPU allocation.
+Screening runs **256 samples per timed workload leg**. Full qualification is
+optional: it uses the same visit order and 256 samples per timed leg, and may
+use a broader separately approved workload map. Run it only if screening
+passes its preapproved criterion and the full stage was explicitly approved;
+a screening pass alone does not authorize it.
 
-### Screening gate
+### Optional early quality check
 
-Use small, workload-specific sample counts to reject weak candidates cheaply:
+This check applies to **all models**, not only TTS. Before screening, if
+approved, run **A -> B** with matching 32-sample cohorts at `c1` and `c8`
+for each arm. Score the model's approved quality metric remotely (WER where
+appropriate) before performance; stop if the predeclared gross-regression
+criterion fails. Resolve an unsupported workload or missing scorer in the
+plan rather than silently omitting a requested check. This small check does
+not prove quality parity or replace a measured server's substantial warmup.
 
-```text
-A/A substantial: A1 -> A2
-A/A timed:       A1 -> A2 -> A2 -> A1
+### Visits and warmups
 
-A/B substantial: A -> B
-A/B timed:       A -> B -> B -> A
-```
-
-### Full qualification
-
-Only a candidate that passes the confirmed screening criterion may enter full
-qualification. Use a separately confirmed full workload map; for example,
-`c1`, `c8`, and `c16` may each use 256 samples, but neither those workloads nor
-that count are defaults.
-
-Full qualification has matching full-size A/A and A/B phases:
+Use the same timed visit order for screening and optional full qualification:
 
 ```text
-A/A substantial: A1 -> A2
-A/A timed:       A1 -> A2 -> A2 -> A1 -> A1 -> A2
+Two live servers fit:  A/A  A1 -> A2 -> A2 -> A1
+                       A/B  A  -> B  -> B  -> A
+                       Tail A  -> B  only if the gain criterion is unmet
 
-A/B substantial: A -> B
-A/B timed:       A -> B -> B -> A -> A -> B
+Two do not fit:        A/B  A  -> B  -> B  -> A -> A -> B
+                       (no separate A/A)
 ```
 
-Within each timed arm visit, iterate only that stage's confirmed workload list.
-For every workload, run exactly one shape warmup immediately followed by
-exactly one timed leg using that workload's own sample counts. Finish this pair
-before advancing to the next workload. Do not batch all shape warmups before
-the timed legs, and do not transpose the loops.
+With two live servers, keep each phase's pair running between visits: A1 and
+A2 have identical baseline source/configuration, while A and B retain their
+respective source/configuration. Give each newly started server one substantial
+warmup before timed work. After the fourth dual-server A/B visit, compare the
+result with the predeclared significant-gain criterion and the A/A noise floor.
+If it passes, record the final `A -> B` visits as skipped and proceed to quality
+scoring; otherwise run them. When two servers cannot fit, restart **every** A/B
+visit, including adjacent visits of the same arm, on the same approved
+placement; give each restart one substantial warmup. Do not add an A/A phase
+to this path. Without an A/A noise floor, treat small A/B deltas as
+uncalibrated rather than claiming a robust performance gain.
 
-The full stage may start automatically only when its exact workload map,
-schedule, screening criterion, and incremental cost were already confirmed.
-Otherwise persist the gate result, terminate the Sandbox, and request approval.
+For each visit, iterate the approved workload list. Run one shape warmup
+immediately followed by one timed leg per workload before advancing to the
+next; do not transpose the workload and visit loops. A/A and A/B use matching
+workloads and sample counts within each stage. Optional full qualification
+retains the visit order, shape-warmup policy, and 256 samples per timed leg;
+any broader workload map must be explicitly approved.
 
-`B -> A` means visit B, then visit A. It does not swap commits, server slots,
-CPU sets, ports, or logical arm identities. A BA placement crossover is a new
-experiment and is not part of the schedule above.
+For TTS quality, retain the **timed-leg WAVs** for only `c1` and `c8` from the
+middle A/B `B -> A` pair (visits 3 and 4) on the Volume. Use matching sample
+IDs and seeds; score the approved quality metrics *after that stage's
+performance visits*, not during timed legs. The earlier 32-sample quality check
+is separate.
+Do not score A/A or other A/B visits without approval.
 
-When one GPU cannot hold both servers, run each visit as a fresh, sequential
-server on the same placement. A1/A2 remain identical baseline restarts, and the
-A/A band measures restart noise. Record the lifecycle in the manifest and use
-the fresh-server contract in execution readiness; live dual servers are an
-option when they fit, not a requirement.
+`B -> A` means visit B, then visit A; it does not exchange sources, server
+slots, ports, CPU sets, or placements. A BA placement crossover is a separate
+experiment. Record the lifecycle and use the
+[execution readiness](references/execution-readiness.md) contract.
 
-The manifest is a closed list. Execute exactly its entries and stop at its end.
-An extra phase, arm, placement, repeat, shape, profiler, or scorer requires a
-new plan and explicit confirmation. First persist evidence and terminate the
-current paid Sandbox. A generic “continue” resumes the existing manifest; it
-never expands it.
+The manifest is a closed list: advance only through its entries and stop at
+its end or a predeclared failed gate. Lock the dual-server gain criterion and
+conditional tail before allocation; record terminal skipped entries when it
+passes. Any extra arm, phase, placement, workload, repeat, profiler, or scorer
+needs a new plan and explicit approval.
+Persist evidence and terminate the paid Sandbox before asking. A generic
+"continue" resumes the existing manifest; it never expands it.
 
 ## Workflow
 
 1. Add a short Modal block to the `$model-profiling` plan: profile/app, image
    digest, GPU, timeout, source commits/configs, Volume paths, exact visit
-   sequence, warmups, shapes, total legs/requests, scorer coverage, and maximum
-   GPU time. Wait for the confirmation required by `$model-profiling`.
+   sequence and conditional tail, warmups, shapes, minimum/maximum legs and
+   requests, scorer coverage, and maximum GPU time. Wait for the confirmation
+   required by `$model-profiling`.
 2. Run the pre-GPU checks in execution readiness. Keep them cheap and
    local-first. Use a CPU Modal Sandbox only for behavior that actually
    requires Modal, such as Sandbox lifecycle or Volume mounts.
@@ -97,8 +107,10 @@ never expands it.
 4. Execute the manifest with a fail-closed cursor. Persist each leg's terminal
    status before advancing. A missing, duplicate, reordered, wrong-arm, or
    over-budget entry stops the run.
-5. Keep bulky generated media on the Volume. Run approved scorers there, then
-   copy back reports, metrics, per-sample results, logs, manifests, and checksums.
+5. Keep media required by approved quality scorers on the Volume until scoring
+   completes. If selected, score the early model-specific gate before screening
+   and the main quality set after performance. Copy back compact reports,
+   per-sample scores, logs, manifests, and checksums, not bulky media by default.
 6. After the last approved remote task, terminate the Sandbox before analysis
    or follow-up planning. Verify terminal state and zero owned tasks/containers.
 
