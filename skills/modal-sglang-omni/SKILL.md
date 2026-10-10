@@ -48,8 +48,9 @@ Two live servers fit:  A/A  A1 -> A2 -> A2 -> A1
                        A/B  A  -> B  -> B  -> A
                        Tail A  -> B  only if the gain criterion is unmet
 
-Two do not fit:        A/B  A  -> B  -> B  -> A -> A -> B
-                       (no separate A/A)
+Two do not fit:        A/B  A  -> B  -> B  -> A
+                       Tail A -> B unless the four-visit stop gate passes
+                       No separate A/A
 ```
 
 With two live servers, keep each phase's pair running between visits: A1 and
@@ -61,8 +62,24 @@ If it passes, record the final `A -> B` visits as skipped and proceed to quality
 scoring; otherwise run them. When two servers cannot fit, restart **every** A/B
 visit, including adjacent visits of the same arm, on the same approved
 placement; give each restart one substantial warmup. Do not add an A/A phase
-to this path. Without an A/A noise floor, treat small A/B deltas as
-uncalibrated rather than claiming a robust performance gain.
+to this path. Lock one primary performance metric and its improvement
+direction for each workload in the manifest before allocation. After
+`A1 -> B1 -> B2 -> A2`, use each workload's four **absolute metric values**
+to bound the observed gain: compute `improvement(Ai, Bj)` for all four
+combinations of `i, j in {1, 2}`, then take their minimum and maximum.
+`improvement(A, B)` is `(B - A) / A` for higher-is-better metrics and
+`(A - B) / A` for lower-is-better metrics.
+
+Skip the final `A -> B` only if, for **every** approved workload, the entire
+gain interval is strictly below 4% or strictly above 6%. A workload may be
+in either band; report its conclusion separately. Run the tail if any metric
+is missing, nonpositive or nonfinite, or if any workload's interval touches
+the closed 4–6% band. This cross-arm bound accounts for variation between
+visits without a fixed same-arm drift tolerance: one unusually low A value
+cannot by itself establish a gain above 6%. Record the four values, gain
+interval, thresholds, and terminal status of both tail visits. Without an
+A/A noise floor, treat small A/B deltas as uncalibrated rather than claiming
+a robust performance gain.
 
 For each visit, iterate the approved workload list. Run one shape warmup
 immediately followed by one timed leg per workload before advancing to the

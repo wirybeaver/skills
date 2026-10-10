@@ -92,7 +92,8 @@ timed visit order before GPU allocation:
 ```text
 two live servers fit: A/A = [A1, A2, A2, A1]
                       A/B = [A, B, B, A] + [A, B] if gain criterion is unmet
-one server only:      A/B = [A, B, B, A, A, B]; no A/A
+one server only:      A/B = [A, B, B, A]
+                      tail = [A, B] unless the four-visit stop gate passes; no A/A
 ```
 
 For any model, an approved early quality check is **before** screening:
@@ -111,18 +112,22 @@ visit, every workload has one adjacent, indivisible
 `[shape warmup, timed leg]` pair. Never transpose visit and workload loops.
 
 For `W` workloads, a dual-server stage has `4W` A/A and `4W` or `6W` A/B timed
-legs, with the same number of shape warmups; a single-server stage has only
-`6W` A/B timed legs and shape warmups. Screening timed requests total
-`256 * 8W` or `256 * 10W` for dual-server runs, or `256 * 6W` for single-server
-runs. After the fourth dual-server A/B visit, evaluate the predeclared
-significant-gain criterion against the A/A noise floor. Record the last two
-A/B visits as skipped with the deciding evidence when the criterion passes;
-otherwise run them. Warm each new live server once at startup; for
-the single-server schedule restart and substantially warm the server on **all
-six visits**, including consecutive same-arm visits. Log starts, stops,
-placements, and ports so a reused or silently substituted server fails the
-manifest check. The single-server schedule has no independent A/A noise
-calibration; do not claim that a small A/B delta clears one.
+legs, with the same number of shape warmups; a single-server stage has `4W`
+or `6W` A/B timed legs and shape warmups. Screening timed requests total
+`256 * 8W` or `256 * 10W` for dual-server runs, or `256 * 4W` or `256 * 6W`
+for single-server runs. After the fourth dual-server A/B visit, evaluate the
+predeclared significant-gain criterion against the A/A noise floor. For the
+single-server path, apply the cross-arm gain-interval stop gate in
+`SKILL.md` after visit four. Record the last two A/B visits as skipped with
+the deciding evidence when the applicable gate passes; otherwise run them.
+Fixture-test intervals wholly below 4% or above 6%, one unusually low A
+visit, overlapping arm values, mixed or boundary gains, and invalid metrics.
+Warm each newly started server once; for single-server visits restart and
+substantially warm every **executed** visit, including adjacent same-arm
+visits. Log starts, stops, placements, and ports so a reused or silently
+substituted server fails the manifest check. The single-server schedule has
+no independent A/A noise calibration; do not claim that a small A/B delta
+clears one.
 
 For TTS, retain and score only the timed-leg `c1`/`c8` WAVs from A/B visits
 **3 B -> 4 A** after the stage's performance legs. Both arms must use the
