@@ -119,6 +119,13 @@ Persist evidence and terminate the paid Sandbox before asking. A generic
 - Resolve the CI image to a registry digest and record installed core versions.
 - Upload each intended source arm independently. Use an explicit arm-specific
   `PYTHONPATH`; never replace one shared editable install with another.
+- Export `SGLANG_OMNI_TORCH_COMPILE_DEFAULT=0` to every benchmark model-server
+  process. Keep the environment value fixed across arms; an experiment that
+  changes engine compilation does so through the stage's explicit
+  `enable_torch_compile` config or CLI override. Lock the value in the manifest,
+  assert it in the rendered launch environment before allocation, and verify the
+  owned server process inherited it before sending requests. Component-specific
+  compile switches remain explicit model configuration and are unaffected.
 - Record each arm's logical role, commit, dirty fingerprint, archive hash,
   launch arguments, and source/configuration difference.
 - For a fixed H100 request use `gpu="H100!"` and verify the allocated device.
