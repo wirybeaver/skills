@@ -47,7 +47,7 @@ work; they never block task completion.
 ## Benchmark and end-to-end test comments
 
 A GitHub comment whose primary purpose is to report a benchmark or end-to-end
-test has three concise, visible sections in this order:
+test has three concise sections in this order:
 
 1. **Experiment** — briefly introduce the comparison, workload, and experiment
    process.
@@ -58,6 +58,10 @@ test has three concise, visible sections in this order:
 
 For repeated A/B benchmarks:
 
+- In the PR description's **Benchmarking Result**, include the same compact
+  per-visit metrics table used under the comment's **Key Results**. Preserve
+  the executed visit order and absolute metric values so reviewers can inspect
+  each result without expanding the comment.
 - Report mean improvement as `mean(B visits) / mean(A visits) - 1` and median
   improvement as `median(B visits) / median(A visits) - 1` in both PR
   descriptions and GitHub comments.
@@ -66,24 +70,31 @@ For repeated A/B benchmarks:
 - Cross-arm gain intervals are controller-internal evidence and stay out of PR
   descriptions and GitHub comments.
 
-Put environment setup, reproducibility information, and optional detailed
-analysis after the visible sections in a collapsible block. Exclude manifest
+Wrap every benchmark result comment, including current and historical results,
+in one collapsible block. Keep **Experiment**, **Key Results**, and
+**Conclusion** inside that block, followed by environment setup,
+reproducibility information, and optional detailed analysis. Use the same
+format for every result and avoid nested collapsible blocks. Exclude manifest
 SHAs and exact commands. Publish exact commands in a gist only when the user
 explicitly requests it.
 
-For historical or superseded benchmark results, wrap the entire comment,
-including **Experiment**, **Key Results**, **Conclusion**, and supplementary
-details, in one collapsible block. Use
-`Historical benchmark — click to expand` as its summary and avoid nested
-collapsible blocks.
-
-Use this collapsible form:
+Use this form:
 
 ```html
 <details>
-<summary>Click to expand</summary>
+<summary>Benchmark results — click to expand</summary>
 
-Markdown content goes here.
+## Experiment
+
+...
+
+## Key Results
+
+...
+
+## Conclusion
+
+...
 
 </details>
 ```
