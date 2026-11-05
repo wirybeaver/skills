@@ -5,15 +5,20 @@ description: Run SGLang-Omni profiling and benchmarks on Modal Sandboxes with ex
 
 # Modal SGLang-Omni profiling
 
-This skill is Modal provider glue for `$model-profiling`. It controls how an
-approved experiment runs on Modal; it does not change what the experiment is.
+This skill is Modal provider glue for the upstream SGLang-Omni model-profiling
+workflow. It controls how an approved experiment runs on Modal; it does not
+change what the experiment is.
 
 ## Authority
 
-Read the current `$model-profiling` source workflow and the official `$modal`
-skill. `$model-profiling` owns scope, confirmation, methodology, evidence, and
-reporting. This skill owns Modal setup, execution, persistence, and teardown.
-When they conflict, `$model-profiling` wins.
+Read the current upstream [model-profiling skill](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/SKILL.md),
+[methodology](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/METHODOLOGY.md),
+and [prompt template](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/PROMPT_TEMPLATE.md)
+completely at each invocation, plus the official `$modal` skill. The upstream
+workflow owns scope, confirmation, methodology, evidence, and reporting. This
+skill owns Modal setup, execution, persistence, and teardown. When they
+conflict, the upstream workflow wins. These URLs work without a locally
+installed model-profiling skill.
 
 Read [execution readiness](references/execution-readiness.md) for every run.
 Read [profiler readiness](references/profiler-readiness.md) only when the
@@ -110,11 +115,11 @@ Persist evidence and terminate the paid Sandbox before asking. A generic
 
 ## Workflow
 
-1. Add a short Modal block to the `$model-profiling` plan: profile/app, image
-   digest, GPU, timeout, source commits/configs, Volume paths, exact visit
+1. Add a short Modal block to the upstream model-profiling plan: profile/app,
+   image digest, GPU, timeout, source commits/configs, Volume paths, exact visit
    sequence and conditional tail, warmups, shapes, minimum/maximum legs and
    requests, scorer coverage, and maximum GPU time. Wait for the confirmation
-   required by `$model-profiling`.
+   required by the upstream model-profiling workflow.
 2. Run the pre-GPU checks in execution readiness. Keep them cheap and
    local-first. Use a CPU Modal Sandbox only for behavior that actually
    requires Modal, such as Sandbox lifecycle or Volume mounts.
