@@ -105,12 +105,6 @@ Relative changes and limitations.
 
 ## Benchmark and end-to-end test comments
 
-For an explicitly requested benchmark or end-to-end result comment, use three
-concise sections: **Experiment**, **Benchmark Result**, and **Conclusion**.
-Experiment describes the comparison, workload, and process; Benchmark Result
-uses the combined table above; Conclusion states what the evidence establishes
-and its limitations. Wrap the comment in one collapsible block. Expanded setup
-or analysis may follow the conclusion inside that block. Historical benchmark
-results belong in the PR body as specified above.
+For an explicitly requested benchmark or end-to-end result comment, use the same collapsible format and contents as **Historical benchmark results** above: a summary identifying the workload, configuration, or date, followed by **Benchmark Result**, environment and experiment context, the per-visit absolute-value table, and median-based relative changes with median absolute values and relevant limitations. Use one block per run. Historical benchmark results belong in the PR body as specified above.
 
 Exclude exact commands. Publish them in a gist only when explicitly requested.
