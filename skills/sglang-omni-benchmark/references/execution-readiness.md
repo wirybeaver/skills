@@ -70,6 +70,8 @@ Hash the approved manifest before allocation or execution on an existing target.
 
 Fixture-test added or reordered phases, duplicate or extra legs, request-budget violations, both conditional-tail outcomes, and terminal skipped entries. Test gain bounds below 4%, above 6%, touching either boundary, an unusually low A visit, overlapping arm values, mixed-workload outcomes, and invalid metrics.
 
+For compilation recovery, cover detection during A1 with B1 unstarted, detection during B1 after A1 completes, and confirmation after all four visits. Verify paired invalidation, unique replacement-attempt identities, one shared tail when both triggers fire, retained evidence, and the restart/budget limit. Warmup-only compilation and slow metrics without compilation evidence must leave the schedule unchanged.
+
 A scope change needs a new plan and explicit approval. Stop owned GPU work and complete the provider's cleanup before waiting; a generic continuation resumes only the approved entries.
 
 ## Real GPU allocation gate

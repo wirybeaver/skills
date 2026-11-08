@@ -30,9 +30,7 @@ Read the official `$modal` skill and [Modal execution readiness](references/exec
 3. Allocate one bounded GPU Sandbox. Immediately record its ID and remote run
    path. Verify the requested GPU, idle state, CUDA, mounts, and exact imports
    before downloading weights or starting servers.
-4. Execute the manifest with a fail-closed cursor. Persist each leg's terminal
-   status before advancing. A missing, duplicate, reordered, wrong-arm, or
-   over-budget entry stops the run.
+4. Execute the manifest with a fail-closed cursor, following only declared transitions including the shared benchmark contract's conditional compilation-recovery branches. Persist each leg's terminal status before advancing. An unexpected missing, duplicate, reordered, or wrong-arm entry, or any budget overrun, stops the run.
 5. Keep media required by approved quality scorers on the Volume until scoring
    completes. If selected, score the early model-specific gate before screening
    and the main quality set after performance. Copy back compact reports,

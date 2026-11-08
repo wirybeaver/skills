@@ -54,7 +54,7 @@ A2 have identical baseline source/configuration, while A and B retain their
 respective source/configuration. Give each newly started server one substantial
 warmup before timed work. After the fourth dual-server A/B visit, compare the
 result with the predeclared significant-gain criterion and the A/A noise floor.
-If it passes, record the final `A -> B` visits as skipped and proceed to quality
+If it passes and compilation recovery below does not require a tail, record the final `A -> B` visits as skipped and proceed to quality
 scoring; otherwise run them. When two servers cannot fit, restart **every** A/B
 visit, including adjacent visits of the same arm, on the same approved
 placement; give each restart one substantial warmup. Do not add an A/A phase
@@ -66,7 +66,7 @@ combinations of `i, j in {1, 2}`, then take their minimum and maximum.
 `improvement(A, B)` is `(B - A) / A` for higher-is-better metrics and
 `(A - B) / A` for lower-is-better metrics.
 
-Skip the final `A -> B` only if, for **every** approved workload, the entire
+Unless compilation recovery below requires it, skip the final `A -> B` only if, for **every** approved workload, the entire
 gain interval is strictly below 4% or strictly above 6%. A workload may be
 in either band; report its conclusion separately. Run the tail if any metric
 is missing, nonpositive or nonfinite, or if any workload's interval touches
@@ -84,8 +84,20 @@ workloads and sample counts within each stage. Optional full qualification
 retains the visit order, shape-warmup policy, and 256 samples per timed leg;
 any broader workload map must be explicitly approved.
 
+### Compilation during timed visits
+
+Monitor timestamped compiler logs alongside timed-leg boundaries for DeepGEMM/Triton JIT and `torch.compile` recompilation. Compilation confined to startup or warmup does not trigger recovery. A low throughput value, high latency, or new cache file alone is insufficient evidence; identify compilation overlapping the timed workload. Keep the same declared compilation-cache policy across attempts and retain compiled artifacts when that policy measures steady-state performance.
+
+- **Detected while A1 or B1 is running:** stop submitting timed requests and invalidate the initial A1/B1 pair together. Mark an unstarted B1 as skipped. Preserve the partial results and logs; let in-flight compilation finish and persist its cache within the declared time budget before stopping owned server processes. Then start a new attempt with `A1 -> B1 -> B2 -> A2 -> [A3 -> B3]`. Use fresh visit identities, unchanged sources/cohorts/workloads, and the same warmups and server lifecycle. The new attempt's ordinary tail gate still applies.
+- **Confirmed after A1 -> B1 -> B2 -> A2 finishes:** if A1 or B1 performed anomalously poorly and timed compilation explains the slowdown, append `A3 -> B3` regardless of the ordinary gain gate. This is the same conditional tail, not a second tail if one is already scheduled or completed. Retain the original four results and report A3/B3 separately, marking contaminated visits as unsuitable for a steady-state comparison; do not silently substitute or pool results.
+- **Otherwise:** follow the ordinary schedule. A slow visit without compilation evidence does not authorize discarding it. Compilation discovered in other visits or recurring during the replacement attempt/tail requires diagnosis before further repeats or a clean steady-state claim.
+
+Include these conditional branches in the approved manifest and GPU/request budget, with at most one full restart and one tail per completed attempt. Record each branch decision, evidence, and invalidated/skipped visit status without overwriting the earlier attempt. If the reserved budget or lease cannot cover recovery, persist evidence and stop at the provider's cleanup boundary. Recovery does not authorize a new allocation or lease extension.
+
+### Quality and completion
+
 For TTS quality, retain the **timed-leg WAVs** for only `c1` and `c8` from the
-middle A/B `B -> A` pair (visits 3 and 4) in durable storage. Use matching sample
+middle A/B `B -> A` pair (visits 3 and 4 of the completed attempt) in durable storage. Use matching sample
 IDs and seeds; score the approved quality metrics *after that stage's
 performance visits*, not during timed legs. The earlier 32-sample quality check
 is separate.
@@ -96,10 +108,6 @@ slots, ports, CPU sets, or placements. A BA placement crossover is a separate
 experiment. Record the lifecycle and use the
 [execution readiness](references/execution-readiness.md) contract.
 
-The manifest is a closed list: advance only through its entries and stop at
-its end or a predeclared failed gate. Lock the dual-server gain criterion and
-conditional tail before allocation; record terminal skipped entries when it
-passes. Any extra arm, phase, placement, workload, repeat, profiler, or scorer
-needs a new plan and explicit approval.
+The manifest is a closed list including its conditional recovery branches: advance only through its entries and stop at its end or a predeclared failed gate. Lock the dual-server gain criterion, conditional tail, and compilation recovery before allocation; record terminal skipped entries for unused branches. Any arm, phase, placement, workload, repeat, profiler, or scorer outside that manifest needs a new plan and explicit approval.
 Persist evidence and complete provider cleanup before asking; reacquiring a released target needs new authorization. A generic
 "continue" resumes the existing manifest; it never expands it.
