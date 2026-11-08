@@ -15,6 +15,8 @@ For benchmarks, read [the shared benchmark contract](https://raw.githubuserconte
 
 For profiling or diagnosis, read the current upstream [model-profiling skill](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/SKILL.md), [methodology](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/METHODOLOGY.md), and [prompt template](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/model-profiling/PROMPT_TEMPLATE.md) completely at each invocation. They own profiling scope, layer selection, confirmation, and reporting. This adapter owns Modal mechanics; the upstream workflow wins conflicts about methodology. An uploaded checkout-local copy does not replace the current instruction source.
 
+After model-profiling triage identifies a slow stage, read the current upstream [omni-gpu-deep-dive skill](https://raw.githubusercontent.com/sgl-project/sglang-omni/main/.claude/skills/omni-gpu-deep-dive/SKILL.md) completely for a stage-level GPU deep dive. Follow its backend capability check, mapping/formal trace pair, steady-state gates, and output contract; resolve its resources against that upstream URL. Keep model-profiling responsible for the approved scope and findings record.
+
 Read the official `$modal` skill and [Modal execution readiness](references/execution-readiness.md) for every run. Read [profiler readiness](references/profiler-readiness.md) only when the approved plan names a profiler. Fetch the shared contract from its canonical URL; if it is unavailable, report the blocker rather than inventing a replacement schedule.
 
 ## Workflow
