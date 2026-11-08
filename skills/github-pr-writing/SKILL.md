@@ -57,19 +57,7 @@ Apply these rules to PR bodies and comments:
   units in the header. Preserve execution order and absolute values for every
   visit. Use parameter columns for different modes or workloads; avoid separate
   arm-specific column groups or separate performance and accuracy tables.
-- Put relative changes in prose after the table, naming the compared arms and
-  improvement direction. Keep percentage changes and summary rows out of the
-  per-visit table. Cross-arm gain intervals stay in controller evidence.
-- Default to median performance statistics rather than mean statistics, including
-  per-request latency and aggregation across repeated visits. Compute latency
-  medians from per-request observations; an average of visit means is not a
-  median. Report means only when explicitly requested. Keep throughput as each
-  visit's measured requests per second and accuracy in its established form,
-  such as corpus WER; do not replace these with medians over individual requests.
-- For repeated A/B benchmarks, state the actual visit order. Summarize throughput
-  change as `median(B visit throughputs) / median(A visit throughputs) - 1` by
-  default. Distinguish this aggregation across visits from each visit's median
-  request latency.
+- State the actual visit order and keep per-visit absolute measurements in the table. After the table, report median-based relative changes in prose, naming the compared arms and improvement direction. Immediately follow each relative change with parentheses containing both arms' median absolute values, explicit arm labels, and units, for example `+14.22% (B/C: 38.29/43.73 req/s)`. Compute throughput change as `median(candidate visit throughputs) / median(baseline visit throughputs) - 1`; for accuracy, compare medians of visit-level metrics such as corpus WER. Compute each visit's median latency from its per-request observations, keeping it distinct from aggregation across visits. Use means only when explicitly requested. Keep relative changes and summary rows in the prose and cross-arm gain intervals in controller evidence.
 
 Use this table shape, adding only relevant parameter and metric columns:
 
@@ -85,7 +73,7 @@ Brief environment, workload, arm definitions, and executed visit order.
 | Normal | B2 | ... | ... | ... |
 | Normal | A2 | ... | ... | ... |
 
-Median throughput improvement (B/A): ... . Accuracy observation and limitations.
+Median throughput improvement (B/A): ...% (A/B: .../... req/s). Median corpus WER reduction (B vs A): ...% relative (A/B: ...%/...%). Relevant limitations.
 ```
 
 ## Historical benchmark results
