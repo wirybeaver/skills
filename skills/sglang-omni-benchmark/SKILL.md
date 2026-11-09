@@ -54,7 +54,7 @@ A2 have identical baseline source/configuration, while A and B retain their
 respective source/configuration. Give each newly started server one substantial
 warmup before timed work. After the fourth dual-server A/B visit, compare the
 result with the predeclared significant-gain criterion and the A/A noise floor.
-If it passes and compilation recovery below does not require a tail, record the final `A -> B` visits as skipped and proceed to quality
+If it passes, record the final `A -> B` visits as skipped and proceed to quality
 scoring; otherwise run them. When two servers cannot fit, restart **every** A/B
 visit, including adjacent visits of the same arm, on the same approved
 placement; give each restart one substantial warmup. Do not add an A/A phase
@@ -66,7 +66,7 @@ combinations of `i, j in {1, 2}`, then take their minimum and maximum.
 `improvement(A, B)` is `(B - A) / A` for higher-is-better metrics and
 `(A - B) / A` for lower-is-better metrics.
 
-Unless compilation recovery below requires it, skip the final `A -> B` only if, for **every** approved workload, the entire
+Skip the final `A -> B` only if, for **every** approved workload, the entire
 gain interval is strictly below 4% or strictly above 6%. A workload may be
 in either band; report its conclusion separately. Run the tail if any metric
 is missing, nonpositive or nonfinite, or if any workload's interval touches
@@ -88,11 +88,10 @@ any broader workload map must be explicitly approved.
 
 Monitor timestamped compiler logs alongside timed-leg boundaries for DeepGEMM/Triton JIT and `torch.compile` recompilation. Compilation confined to startup or warmup does not trigger recovery. A low throughput value, high latency, or new cache file alone is insufficient evidence; identify compilation overlapping the timed workload. Keep the same declared compilation-cache policy across attempts and retain compiled artifacts when that policy measures steady-state performance.
 
-- **Detected while A1 or B1 is running:** stop submitting timed requests and invalidate the initial A1/B1 pair together. Mark an unstarted B1 as skipped. Preserve the partial results and logs; let in-flight compilation finish and persist its cache within the declared time budget before stopping owned server processes. Then start a new attempt with `A1 -> B1 -> B2 -> A2 -> [A3 -> B3]`. Use fresh visit identities, unchanged sources/cohorts/workloads, and the same warmups and server lifecycle. The new attempt's ordinary tail gate still applies.
-- **Confirmed after A1 -> B1 -> B2 -> A2 finishes:** if A1 or B1 performed anomalously poorly and timed compilation explains the slowdown, append `A3 -> B3` regardless of the ordinary gain gate. This is the same conditional tail, not a second tail if one is already scheduled or completed. Retain the original four results and report A3/B3 separately, marking contaminated visits as unsuitable for a steady-state comparison; do not silently substitute or pool results.
-- **Otherwise:** follow the ordinary schedule. A slow visit without compilation evidence does not authorize discarding it. Compilation discovered in other visits or recurring during the replacement attempt/tail requires diagnosis before further repeats or a clean steady-state claim.
+- **First occurrence in any arm's formal timed leg:** invalidate the entire benchmark attempt, regardless of the visit, workload, phase, or when the compilation evidence is confirmed. Stop submitting timed requests, preserve all results and timestamped evidence, and mark remaining entries as skipped. Let in-flight compilation finish and persist its cache within the declared budget, then stop owned server processes. Rerun the complete approved benchmark schedule from its first visit exactly once, including A/A when applicable, every workload, the ordinary conditional-tail gate, and the prescribed server restarts and warmups. Use unique attempt/visit identities with unchanged sources, cohorts, placement, runtime settings, and compilation-cache policy. A replacement leg or an appended tail does not replace this full rerun.
+- **Compilation recurs in the rerun:** preserve the evidence, invalidate that attempt, and stop at the provider's cleanup boundary. Do not start a third attempt or claim a clean steady-state result; further work requires diagnosis and a new approved plan.
 
-Include these conditional branches in the approved manifest and GPU/request budget, with at most one full restart and one tail per completed attempt. Record each branch decision, evidence, and invalidated/skipped visit status without overwriting the earlier attempt. If the reserved budget or lease cannot cover recovery, persist evidence and stop at the provider's cleanup boundary. Recovery does not authorize a new allocation or lease extension.
+Reserve this single full rerun in the manifest and GPU/request budget. The retry limit is shared across all arms, visits, workloads, and phases of the benchmark; it does not reset per arm or stage. Keep invalidated attempts separate from the replacement attempt and use only a clean completed attempt for steady-state comparisons. Slow metrics without compilation evidence leave the schedule unchanged. If the budget or lease cannot cover the rerun and cleanup, persist evidence and stop. Recovery does not authorize a new allocation or lease extension.
 
 ### Quality and completion
 

@@ -70,7 +70,7 @@ Hash the approved manifest before allocation or execution on an existing target.
 
 Fixture-test added or reordered phases, duplicate or extra legs, request-budget violations, both conditional-tail outcomes, and terminal skipped entries. Test gain bounds below 4%, above 6%, touching either boundary, an unusually low A visit, overlapping arm values, mixed-workload outcomes, and invalid metrics.
 
-For compilation recovery, cover detection during A1 with B1 unstarted, detection during B1 after A1 completes, and confirmation after all four visits. Verify paired invalidation, unique replacement-attempt identities, one shared tail when both triggers fire, retained evidence, and the restart/budget limit. Warmup-only compilation and slow metrics without compilation evidence must leave the schedule unchanged.
+For compilation recovery, cover evidence from any arm or timed visit, including A/A, later A/B visits, a conditional tail, and confirmation after an attempt finishes. Verify whole-attempt invalidation, a complete schedule rerun with unique identities, and one shared retry limit across arms/workloads/phases. Recurrence in the rerun must stop without a third attempt. Verify retained evidence and the budget/lease gate. Warmup-only compilation and slow metrics without compilation evidence must leave the schedule unchanged.
 
 A scope change needs a new plan and explicit approval. Stop owned GPU work and complete the provider's cleanup before waiting; a generic continuation resumes only the approved entries.
 
