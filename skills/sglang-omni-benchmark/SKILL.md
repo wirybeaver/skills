@@ -95,7 +95,7 @@ Reserve this single full rerun in the manifest and GPU/request budget. The retry
 
 ### Quality and completion
 
-For TTS quality, retain the **timed-leg WAVs** for only `c1` and `c8` from the
+For TTS quality, retain the **timed-leg WAVs** for every workload from the
 middle A/B `B -> A` pair (visits 3 and 4 of the completed attempt) in durable storage. Use matching sample
 IDs and seeds; score the approved quality metrics *after that stage's
 performance visits*, not during timed legs. The earlier 32-sample quality check
