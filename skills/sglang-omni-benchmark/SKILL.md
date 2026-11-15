@@ -66,8 +66,9 @@ combinations of `i, j in {1, 2}`, then take their minimum and maximum.
 `improvement(A, B)` is `(B - A) / A` for higher-is-better metrics and
 `(A - B) / A` for lower-is-better metrics.
 
-Skip the final `A -> B` only if, for **every** approved workload, the entire
-gain interval is strictly below 4% or strictly above 6%. A workload may be
+Workloads queued for compilation recovery take their tail decision in that pass.
+For the workloads being evaluated, skip the final `A -> B` only if **every** gain
+interval is strictly below 4% or strictly above 6%. A workload may be
 in either band; report its conclusion separately. Run the tail if any metric
 is missing, nonpositive or nonfinite, or if any workload's interval touches
 the closed 4–6% band. This cross-arm bound accounts for variation between
@@ -79,8 +80,9 @@ a robust performance gain.
 
 For each visit, iterate the approved workload list. Run one shape warmup
 immediately followed by one timed leg per workload before advancing to the
-next; do not transpose the workload and visit loops. A/A and A/B use matching
-workloads and sample counts within each stage. Optional full qualification
+next; do not transpose the workload and visit loops. Workloads queued for
+compilation recovery resume in the consolidated recovery pass below. A/A and
+A/B use matching workloads and sample counts within each stage. Optional full qualification
 retains the visit order, shape-warmup policy, and 256 samples per timed leg;
 any broader workload map must be explicitly approved.
 
@@ -88,16 +90,18 @@ any broader workload map must be explicitly approved.
 
 Monitor timestamped compiler logs alongside timed-leg boundaries for DeepGEMM/Triton JIT and `torch.compile` recompilation. Compilation confined to startup or warmup does not trigger recovery. A low throughput value, high latency, or new cache file alone is insufficient evidence; identify compilation overlapping the timed workload. Keep the same declared compilation-cache policy across attempts and retain compiled artifacts when that policy measures steady-state performance.
 
-- **First occurrence in any arm's formal timed leg:** invalidate the entire benchmark attempt, regardless of the visit, workload, phase, or when the compilation evidence is confirmed. Stop submitting timed requests, preserve all results and timestamped evidence, and mark remaining entries as skipped. Let in-flight compilation finish and persist its cache within the declared budget, then stop owned server processes. Rerun the complete approved benchmark schedule from its first visit exactly once, including A/A when applicable, every workload, the ordinary conditional-tail gate, and the prescribed server restarts and warmups. Use unique attempt/visit identities with unchanged sources, cohorts, placement, runtime settings, and compilation-cache policy. A replacement leg or an appended tail does not replace this full rerun.
-- **Compilation recurs in the rerun:** preserve the evidence, invalidate that attempt, and stop at the provider's cleanup boundary. Do not start a third attempt or claim a clean steady-state result; further work requires diagnosis and a new approved plan.
+- **First occurrence for a workload:** invalidate that workload's original performance sequence across all arms, visits, and phases, including earlier completed legs. Preserve its results and timestamped evidence, let in-flight compilation finish, and retain its cache. Queue the workload for recovery and mark its remaining measurement entries as deferred. Continue the other workloads in the original visit/workload order, with their results still valid. Evaluate their conditional tails normally; defer the affected workload's tail decision to its rerun. Preserve required server teardown and restart boundaries.
+- **After the other workloads finish:** audit the original timed logs for late compilation evidence, then run one consolidated recovery pass containing every affected workload, in their original relative order. Rerun their complete approved sequences from the first visit, including A/A when applicable, the ordinary conditional-tail gate, and the prescribed server restarts and warmups. Use unique recovery/visit identities with unchanged sources, cohorts, placement, runtime settings, and compilation-cache policy. Rerun both arms even when only one compiled; use the recovery sequence alone for that workload's performance comparison.
+- **Compilation recurs during recovery:** preserve the evidence, mark that workload's recovery as failed, and skip its remaining measurement entries. Finish the other queued workloads, then perform provider cleanup. Each affected workload gets one recovery sequence; further retries require diagnosis and a new approved plan.
 
-Reserve this single full rerun in the manifest and GPU/request budget. The retry limit is shared across all arms, visits, workloads, and phases of the benchmark; it does not reset per arm or stage. Keep invalidated attempts separate from the replacement attempt and use only a clean completed attempt for steady-state comparisons. Slow metrics without compilation evidence leave the schedule unchanged. If the budget or lease cannot cover the rerun and cleanup, persist evidence and stop. Recovery does not authorize a new allocation or lease extension.
+Reserve this consolidated recovery pass in the manifest and GPU/request budget, allowing for all workloads to be affected. Deduplicate the recovery queue by workload; the one-rerun limit covers all of its arms, visits, and phases. Keep original and recovery records separate, and report each workload's accepted sequence or failed/incomplete status. Slow metrics without compilation evidence leave the schedule unchanged. If the budget or lease cannot cover recovery and cleanup, preserve the completed workloads' valid results and mark pending recovery workloads incomplete. Recovery does not authorize a new allocation or lease extension.
 
 ### Quality and completion
 
 For TTS quality, retain the **timed-leg WAVs** for every workload from the
-middle A/B `B -> A` pair (visits 3 and 4 of the completed attempt) in durable storage. Use matching sample
-IDs and seeds; score the approved quality metrics *after that stage's
+middle A/B `B -> A` pair (visits 3 and 4 of that workload's accepted original or
+recovery sequence) in durable storage. Use matching sample IDs and seeds;
+score the approved quality metrics *after that stage's
 performance visits*, not during timed legs. The earlier 32-sample quality check
 is separate.
 Do not score A/A or other A/B visits without approval.
