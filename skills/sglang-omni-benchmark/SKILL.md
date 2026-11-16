@@ -114,3 +114,13 @@ experiment. Record the lifecycle and use the
 The manifest is a closed list including its conditional recovery branches: advance only through its entries and stop at its end or a predeclared failed gate. Lock the dual-server gain criterion, conditional tail, and compilation recovery before allocation; record terminal skipped entries for unused branches. Any arm, phase, placement, workload, repeat, profiler, or scorer outside that manifest needs a new plan and explicit approval.
 Persist evidence and complete provider cleanup before asking; reacquiring a released target needs new authorization. A generic
 "continue" resumes the existing manifest; it never expands it.
+
+## Public experiment descriptions
+
+In PR bodies and public benchmark comments, describe the actual executed visit
+order, server restarts, warmups, and input cohorts. The optional `A -> B` tail is
+an internal scheduling mechanism: keep its decision, thresholds, and skipped
+entries in the manifest and controller evidence. Omit statements such as “the
+optional tail was not triggered” from public descriptions unless explicitly
+requested. If the tail runs, include those visits in the reported order and
+results.
