@@ -1,6 +1,6 @@
 ---
 name: github-pr-writing
-description: Draft, edit, or review GitHub PR descriptions and benchmark or end-to-end result comments for concise human review.
+description: Write or review GitHub PR descriptions, reply to review comments, and write benchmark or end-to-end result comments.
 ---
 
 # GitHub PR writing
@@ -38,6 +38,12 @@ extend it without replacing the existing text. Any removal or substantive
 rewrite requires explicit user approval.
 
 **Related Links** is optional; adding an absent section requires user approval unless already authorized, and that decision must not block the requested work.
+
+## Review replies
+
+- Keep each reply brief. Reply in the relevant inline thread. When the requested fix is complete, use `Done.` or `Done.` followed by one sentence naming the change.
+- If you also post a top-level reply, include only what the inline replies have not covered, such as validation or a PR description update.
+- When posting multiple replies, post them one at a time. After confirming each post, wait a fresh random 1–3 minutes before posting the next, including any top-level reply.
 
 ## Benchmark results
 
